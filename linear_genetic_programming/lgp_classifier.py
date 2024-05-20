@@ -2,7 +2,7 @@ from linear_genetic_programming._evolve import Evolve
 from linear_genetic_programming._population import Population
 import numpy as np
 import copy
-import pickle
+import json
 
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
@@ -299,69 +299,91 @@ class LGPClassifier(BaseEstimator, ClassifierMixin):
             y_pred[i, 1] = sigmoid_pred  # when >0.5, there is larger probability in class 1
         return y_pred
 
-    def save_model(self, fname='lgp.pkl', mode='ab'):
+    def save_model(self, fname='lgp.json', mode='w'):
         '''
-        Save the current object into a pickle file. Assuming the file is in the
+        Save the current object into a json file. Assuming the file is in the
         same directory.
 
         Parameters
         ----------
-        fname: string (default = 'lgp.pkl')
+        fname: string (default = 'lgp.json')
             file name of the output
+        mode: string (default = 'w')
+            file write mode
 
         Returns
         -------
         True:
-            if successfully saved
-
+                if successfully saved
         '''
-        with open(fname, mode) as output:
-            pickle.dump(self, output, pickle.HIGHEST_PROTOCOL)
+        obj_dict = self.__dict__.copy()
+        # Handle numpy arrays specifically
+        for key, value in obj_dict.items():
+            if isinstance(value, np.ndarray):
+                obj_dict[key] = value.tolist()  # Convert arrays to lists
+            elif isinstance(value, set):
+                obj_dict[key] = list(value)  # Convert sets to lists
+
+        with open(fname, mode) as file:
+            json.dump(obj_dict, file)
         return True
 
     @classmethod
-    def load_model(cls, fname='lgp.pkl', mode="rb"):
+    def load_model(cls, fname='lgp.json', mode='r'):
         '''
-        load lgp object from a pickle file. Assuming the file is in the
-        same directory
+        Load an LGPClassifier object from a json file. Assuming the file is in the
+        same directory.
 
         Parameters
         ----------
-        fname: string (default = 'lgp.pkl')
-            file name of the output
+        fname: string (default = 'lgp.json')
+            file name of the input
+        mode: string (default = 'r')
+            file read mode
 
         Returns
         -------
-        lgp: LGPClassifier generator
-            generator
+        lgp: LGPClassifier
+            An instance of LGPClassifier with properties set from file
         '''
-        with open(fname, mode) as input_f:
-            while True:
-                try:
-                    yield pickle.load(input_f, encoding='bytes')
-                except EOFError:
-                    break
+        with open(fname, mode) as file:
+            obj_dict = json.load(file)
+        # Create a new object and set attributes
+        new_obj = cls()
+        for key, value in obj_dict.items():
+            if key == 'register_':  # Re-convert lists back to numpy arrays if necessary
+                setattr(new_obj, key, np.array(value))
+            else:
+                setattr(new_obj, key, value)
+        return new_obj
 
     @classmethod
-    def load_model_directly(cls, pickle_file_input):
+    def load_model_directly(cls, byte_stream_input):
         '''
-        Used to read a file in website
+        Load an LGPClassifier object from a byte stream using JSON.
 
         Parameters
         ----------
-        pickle_file_input: byte stream
-            BytesIO input
+        byte_stream_input: byte stream
+            BytesIO input containing the JSON serialized object.
 
         Returns
         -------
-        lgp: LGPClassifier generator
-            generator
+        lgp: LGPClassifier
+            An instance of LGPClassifier with properties set from the byte stream
         '''
-        while True:
-            try:
-                yield pickle.load(pickle_file_input, encoding='bytes')
-            except EOFError:
-                break
+        # Read the byte stream and decode to get the string
+        json_str = byte_stream_input.getvalue().decode('utf-8')
+        obj_dict = json.loads(json_str)
+
+        # Create a new object and set attributes
+        new_obj = cls()
+        for key, value in obj_dict.items():
+            if key == 'register_':  # Re-convert lists back to numpy arrays if necessary
+                setattr(new_obj, key, np.array(value))
+            else:
+                setattr(new_obj, key, value)
+        return new_obj
 
     # semantic intron does not alter the value stored in r0
     # Algorithm 3.1 detection of structural introns from LGP book
